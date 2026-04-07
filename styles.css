@@ -415,7 +415,11 @@ footer {
     grid-template-columns: 1fr;
   }
 
+  .controls {
+    order: 1;
+  }
+
   .outputs {
-    order: -1;
+    order: 2;
   }
 }

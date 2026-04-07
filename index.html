@@ -58,9 +58,22 @@
           </label>
 
           <label>
-            Electricity price ($/kWh)
+            Private electricity price ($/kWh)
             <input id="electricityPrice" type="range" min="0.08" max="0.4" step="0.01" value="0.14" />
             <span data-output="electricityPrice"></span>
+          </label>
+
+          <label>
+            Public charging price ($/kWh)
+            <input id="publicElectricityPrice" type="range" min="0.1" max="0.9" step="0.01" value="0.48" />
+            <span data-output="publicElectricityPrice"></span>
+          </label>
+
+          <label>
+            Public charging share (%)
+            <input id="publicChargeShare" type="range" min="0" max="100" step="5" value="40" />
+            <span data-output="publicChargeShare"></span>
+            <span class="hint">Share of EV charging energy purchased at public rates during the trip.</span>
           </label>
 
           <label>
@@ -105,6 +118,33 @@
             EV efficiency (kWh/mi)
             <input id="evEfficiency" type="range" min="0.18" max="0.55" step="0.01" value="0.31" />
             <span data-output="evEfficiency"></span>
+          </label>
+
+          <label>
+            EV range per charge (miles)
+            <input id="evRange" type="range" min="80" max="450" step="10" value="260" />
+            <span data-output="evRange"></span>
+          </label>
+
+          <label>
+            EV max charge speed (kW)
+            <input id="evChargeSpeed" type="range" min="25" max="350" step="5" value="150" />
+            <span data-output="evChargeSpeed"></span>
+            <span class="hint">Used to estimate charging time with a realistic effective-power factor.</span>
+          </label>
+
+          <label>
+            Effective charge power factor (%)
+            <input id="evChargePowerFactor" type="range" min="40" max="100" step="1" value="72" />
+            <span data-output="evChargePowerFactor"></span>
+            <span class="hint">Real-world average charge power as a share of max speed (tapering, station limits, battery temp).</span>
+          </label>
+
+          <label>
+            Charge stop overhead (minutes/stop)
+            <input id="evChargeStopOverhead" type="range" min="0" max="40" step="1" value="7" />
+            <span data-output="evChargeStopOverhead"></span>
+            <span class="hint">Time per stop for exit, plug-in, payment, waiting, and re-entry.</span>
           </label>
 
           <label>

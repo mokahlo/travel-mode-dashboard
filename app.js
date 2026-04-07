@@ -10,12 +10,18 @@ const ids = [
   "wageTimeFactor",
   "gasPrice",
   "electricityPrice",
+  "publicElectricityPrice",
+  "publicChargeShare",
   "gridIntensity",
   "seatType",
   "evOccupancy",
   "suvOccupancy",
   "hybridOccupancy",
   "evEfficiency",
+  "evRange",
+  "evChargeSpeed",
+  "evChargePowerFactor",
+  "evChargeStopOverhead",
   "suvMpg",
   "hybridMpg",
   "driveSpeed",
@@ -65,15 +71,26 @@ function num(v, digits = 2) {
 function buildModeModels() {
   const seat = seatProfiles[value("seatType")];
   const gasPrice = value("gasPrice");
-  const electricPrice = value("electricityPrice");
+  const privateElectricPrice = value("electricityPrice");
+  const publicElectricPrice = value("publicElectricityPrice");
+  const publicChargeShare = value("publicChargeShare") / 100;
+  const electricPrice = privateElectricPrice * (1 - publicChargeShare) + publicElectricPrice * publicChargeShare;
   const gridIntensity = value("gridIntensity");
 
   const evEfficiency = value("evEfficiency");
+  const evRange = Math.max(1, value("evRange"));
+  const evChargeSpeed = Math.max(1, value("evChargeSpeed"));
+  const evChargePowerFactor = Math.max(0.01, value("evChargePowerFactor") / 100);
+  const evChargeStopOverheadHours = Math.max(0, value("evChargeStopOverhead") / 60);
   const suvMpg = value("suvMpg");
   const hybridMpg = value("hybridMpg");
   const driveSpeed = value("driveSpeed");
   const driveFixedCost = value("driveFixedCost");
   const driveDeadhead = value("driveDeadheadHours");
+
+  // Effective charging includes tapering and site variability, configured by user assumptions.
+  const effectiveChargePower = evChargeSpeed * evChargePowerFactor;
+  const chargingHoursPerMile = evEfficiency / effectiveChargePower + evChargeStopOverheadHours / evRange;
 
   const evOccupancy = Math.max(1, value("evOccupancy"));
   const suvOccupancy = Math.max(1, value("suvOccupancy"));
@@ -94,9 +111,12 @@ function buildModeModels() {
       fixedCost: driveFixedCost / evOccupancy,
       costPerMile: (evEfficiency * electricPrice) / evOccupancy,
       fixedTime: driveDeadhead,
-      hoursPerMile: 1 / driveSpeed,
+      hoursPerMile: 1 / driveSpeed + chargingHoursPerMile,
       fixedCo2: 0,
       co2PerMile: (evEfficiency * gridIntensity) / evOccupancy,
+      evRange,
+      chargingHoursPerMile,
+      effectiveChargePower,
     },
     {
       id: "suv",
@@ -138,6 +158,8 @@ function evaluateMode(mode, distance, valueOfTime) {
   const monetaryCost = mode.fixedCost + mode.costPerMile * distance;
   const hours = mode.fixedTime + mode.hoursPerMile * distance;
   const co2 = mode.fixedCo2 + mode.co2PerMile * distance;
+  const chargeStops = mode.id === "ev" ? Math.max(0, Math.ceil(distance / mode.evRange) - 1) : 0;
+  const chargeHours = mode.id === "ev" ? mode.chargingHoursPerMile * distance : 0;
 
   return {
     ...mode,
@@ -146,6 +168,8 @@ function evaluateMode(mode, distance, valueOfTime) {
     hours,
     co2,
     generalizedCost: monetaryCost + valueOfTime * hours,
+    chargeStops,
+    chargeHours,
   };
 }
 
@@ -169,6 +193,11 @@ function buildCard(result, flags, index) {
     <p class="metric">Monetary cost: <strong>${money(result.monetaryCost)}</strong></p>
     <p class="metric">Carbon: <strong>${num(result.co2)} kg</strong></p>
     <p class="metric">Door-to-door time: <strong>${num(result.hours)} h</strong></p>
+    ${
+      result.id === "ev"
+        ? `<p class="metric">Estimated charge stops: <strong>${num(result.chargeStops, 0)}</strong> (charging time ${num(result.chargeHours)} h)</p>`
+        : ""
+    }
     <p class="metric">Generalized cost ($ + time): <strong>${money(result.generalizedCost)}</strong></p>
   `;
   return card;
@@ -297,6 +326,9 @@ function buildInsights(results, valueOfTime) {
 
   const lowestGeneralized = results.reduce((best, r) => (r.generalizedCost < best.generalizedCost ? r : best), results[0]);
   insights.push(`At ${num(results[0].distance, 0)} miles, best combined money+time mode is ${lowestGeneralized.name}.`);
+  insights.push(
+    `EV charging estimate: about ${num(ev.chargeStops, 0)} stop(s), adding ~${num(ev.chargeHours)} hours (effective charge power ${num(ev.effectiveChargePower, 0)} kW).`
+  );
 
   return insights;
 }
@@ -343,11 +375,17 @@ function updateOutputLabels() {
       wageTimeFactor: `${num(v, 0)}%`,
       gasPrice: `$${num(v)}/gal`,
       electricityPrice: `$${num(v)}/kWh`,
+      publicElectricityPrice: `$${num(v)}/kWh`,
+      publicChargeShare: `${num(v, 0)}%`,
       gridIntensity: `${num(v)} kg/kWh`,
       evOccupancy: `${num(v, 0)} travelers`,
       suvOccupancy: `${num(v, 0)} travelers`,
       hybridOccupancy: `${num(v, 0)} travelers`,
       evEfficiency: `${num(v)} kWh/mi`,
+      evRange: `${num(v, 0)} mi`,
+      evChargeSpeed: `${num(v, 0)} kW`,
+      evChargePowerFactor: `${num(v, 0)}%`,
+      evChargeStopOverhead: `${num(v, 0)} min`,
       suvMpg: `${num(v, 0)} mpg`,
       hybridMpg: `${num(v, 0)} mpg`,
       driveSpeed: `${num(v, 0)} mph`,
@@ -377,12 +415,18 @@ document.getElementById("resetBtn").addEventListener("click", () => {
     wageTimeFactor: "100",
     gasPrice: "3.9",
     electricityPrice: "0.14",
+    publicElectricityPrice: "0.48",
+    publicChargeShare: "40",
     gridIntensity: "0.38",
     seatType: "economy",
     evOccupancy: "1",
     suvOccupancy: "2",
     hybridOccupancy: "1",
     evEfficiency: "0.31",
+    evRange: "260",
+    evChargeSpeed: "150",
+    evChargePowerFactor: "72",
+    evChargeStopOverhead: "7",
     suvMpg: "22",
     hybridMpg: "44",
     driveSpeed: "58",
