@@ -6,13 +6,15 @@ const seatProfiles = {
 
 const DEFAULT_FLIGHT_SPEED = 500; // mph, used when no user input is provided
 const DEFAULT_DRIVE_SPEED = 58; // mph, typical average used when unknown
+const AVG_SPEEDS = { train: 80, bus: 50, ferry: 30 };
+const CO2_PER_MILE = { train: 0.05, bus: 0.12, ferry: 0.04 };
+let lastLiveEstimates = null;
 
 const ids = [
   "fromCity",
   "toCity",
   "departDate",
   "returnDate",
-  "travelMode",
   "passengers",
   "distanceMiles",
   "passengerWage",
@@ -277,6 +279,78 @@ function render() {
 
   const results = buildModeModels().map((mode) => evaluateMode(mode, distance, valueOfTime));
 
+  // If we have live estimates, merge them into the main comparison.
+  if (lastLiveEstimates && Array.isArray(lastLiveEstimates.estimates)) {
+    const baseIds = new Set(results.map((r) => r.id));
+    const seat = seatProfiles[value("seatType")];
+    const passengers = Math.max(1, Number(value("passengers") || 1));
+    const driveSpeed = Number(value("driveSpeed")) || DEFAULT_DRIVE_SPEED;
+    const driveDeadhead = Number(value("driveDeadheadHours")) || 0;
+    const flightFixedTime = Number(value("flightFixedTime")) || 0;
+
+    lastLiveEstimates.estimates.forEach((est) => {
+      const id = String(est.mode || "").toLowerCase();
+      const price = Number(est.price || 0);
+      if (!id) return;
+
+      if (id === "flight") {
+        const flightMode = {
+          id: "flight",
+          name: `Fly ${seat.label} (live)`,
+          tags: ["Flight", "Live"],
+          fixedCost: price * seat.costMultiplier,
+          costPerMile: 0,
+          fixedTime: flightFixedTime,
+          hoursPerMile: 1 / DEFAULT_FLIGHT_SPEED,
+          fixedCo2: 0,
+          co2PerMile: value("flightCo2PerMile") * seat.co2Multiplier,
+        };
+        const evaluated = evaluateMode(flightMode, distance, valueOfTime);
+        const idx = results.findIndex((r) => r.id === "flight");
+        if (idx >= 0) results[idx] = evaluated;
+        else results.push(evaluated);
+        return;
+      }
+
+      if (id === "drive") {
+        const driveMode = {
+          id: "drive",
+          name: `Drive (live)`,
+          tags: ["Drive", "Live"],
+          fixedCost: price / passengers,
+          costPerMile: 0,
+          fixedTime: driveDeadhead,
+          hoursPerMile: 1 / driveSpeed,
+          fixedCo2: 0,
+          co2PerMile: CO2_PER_MILE['car'] || 0.2,
+        };
+        const evaluated = evaluateMode(driveMode, distance, valueOfTime);
+        const idx = results.findIndex((r) => r.id === "drive");
+        if (idx >= 0) results[idx] = evaluated;
+        else results.push(evaluated);
+        return;
+      }
+
+      // Add other modes (train, bus, etc.) if they aren't already present.
+      if (!baseIds.has(id)) {
+        const avgSpeed = AVG_SPEEDS[id] || 60;
+        const co2PerMile = CO2_PER_MILE[id] || 0.12;
+        const otherMode = {
+          id,
+          name: `${id.charAt(0).toUpperCase() + id.slice(1)} (live)`,
+          tags: ["Estimate", "Live"],
+          fixedCost: price,
+          costPerMile: 0,
+          fixedTime: 0,
+          hoursPerMile: 1 / avgSpeed,
+          fixedCo2: 0,
+          co2PerMile,
+        };
+        results.push(evaluateMode(otherMode, distance, valueOfTime));
+      }
+    });
+  }
+
   const flags = {
     bestCost: winnerId(results, "monetaryCost"),
     bestCo2: winnerId(results, "co2"),
@@ -322,7 +396,7 @@ async function fetchTripEstimate() {
     to: value('toCity'),
     departDate: value('departDate'),
     returnDate: value('returnDate'),
-    mode: state.travelMode ? state.travelMode.value : 'flight',
+    mode: 'all',
     passengers: Number(state.passengers ? state.passengers.value : 1),
     seatType: state.seatType ? state.seatType.value : 'economy',
     gasPrice: value('gasPrice'),
@@ -356,7 +430,10 @@ async function fetchTripEstimate() {
     }
 
     const data = await resp.json();
+    // Save last live estimates and re-render the main comparison to include them
+    lastLiveEstimates = data;
     displayEstimate(data);
+    render();
   } catch (err) {
     if (tripEstimateEl) tripEstimateEl.textContent = `Estimate error: ${err.message}`;
   }
