@@ -307,6 +307,16 @@ async function fetchTripEstimate() {
     return;
   }
 
+  // If the user opened the static file directly (file://) or is serving
+  // the site from a static host (GitHub Pages), POST to /api/estimate will fail.
+  // Provide a clearer, actionable message in that case.
+  if (typeof location !== 'undefined' && location.protocol === 'file:') {
+    if (tripEstimateEl)
+      tripEstimateEl.innerHTML =
+        'Live estimates require the Node proxy. Run <code>npm install</code> and <code>npm start</code>, then open <a href="http://localhost:3000">http://localhost:3000</a> to use the feature.';
+    return;
+  }
+
   const payload = {
     from: value('fromCity'),
     to: value('toCity'),
@@ -329,6 +339,18 @@ async function fetchTripEstimate() {
 
     if (!resp.ok) {
       const txt = await resp.text();
+
+      // 405 usually means the origin doesn't allow POST (common when the
+      // static site is hosted without the API). Give the user actionable steps.
+      if (resp.status === 405) {
+        if (tripEstimateEl)
+          tripEstimateEl.innerHTML =
+            `Estimate failed: ${resp.status} Not Allowed. This typically means the API endpoint isn't reachable from this origin (for example: opening index.html directly or serving from a static host that doesn't proxy requests).\n\n` +
+            `Run the local server in the project directory with <code>npm install</code> then <code>npm start</code>, and open <a href="http://localhost:3000">http://localhost:3000</a>.` +
+            (txt ? `<div class="muted">Response: ${txt}</div>` : '');
+        return;
+      }
+
       if (tripEstimateEl) tripEstimateEl.textContent = `Estimate failed: ${resp.status} ${txt}`;
       return;
     }
