@@ -397,6 +397,13 @@ label span {
   color: var(--muted);
 }
 
+.insight-explainer {
+  margin: 0 0 0.6rem 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.25;
+}
+
 .ideas ul {
   margin: 0;
   padding-left: 1rem;
