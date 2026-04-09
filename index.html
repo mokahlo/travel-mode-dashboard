@@ -36,12 +36,14 @@
             From (city / airport)
             <input id="fromCity" type="text" list="airportsList" placeholder="City or IATA code (e.g., Seattle, SEA)" />
             <span class="hint">Origin location for the trip. City name or airport code.</span>
+            <div class="airport-suggestions" id="fromSuggestions" aria-hidden="true"></div>
           </label>
 
           <label>
             To (city / airport)
             <input id="toCity" type="text" list="airportsList" placeholder="City or IATA code (e.g., Phoenix, PHX)" />
             <span class="hint">Destination location for the trip. City name or airport code.</span>
+            <div class="airport-suggestions" id="toSuggestions" aria-hidden="true"></div>
           </label>
 
           <datalist id="airportsList"></datalist>
@@ -83,8 +85,8 @@
           </label>
 
           <label>
-            <button id="getEstimateBtn" class="estimate-btn">Get Live Estimate</button>
-            <span class="hint">Fetches a live price estimate for selected mode and dates.</span>
+            <button id="getEstimateBtn" class="estimate-btn">Estimate Distance from Airports</button>
+            <span class="hint">Uses airport coordinates to calculate great-circle distance and update the scenario.</span>
           </label>
 
           <label>

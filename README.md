@@ -19,60 +19,21 @@ Interactive dashboard for exploring cost, emissions, and time trade-offs across 
 2. Adjust controls to model your scenario.
 3. Review result cards and break-even insights.
 
-### Live trip estimates (optional server)
+### Airport distance estimator (client-side only)
 
-Drive-fly includes an optional small Node.js proxy that can provide date-sensitive trip estimates (uses Nominatim geocoding + mocked pricing by default). When you run the server it will also serve the static site and provide `/api/estimate` for the frontend.
+The dashboard now computes trip distance directly in the browser using airport coordinates from `airports.json`.
 
-Quick start:
+- No serverless API required.
+- No backend required.
+- Use the **From** and **To** airport fields and click **Estimate Distance from Airports**.
 
-PowerShell:
+The calculated great-circle distance updates the trip distance slider and downstream cost/carbon/time comparisons.
 
-```powershell
-cd "c:\Users\089741\OneDrive - City of Phoenix\dev\drive-fly"
-npm install
-$env:TRIP_API_PROVIDER = ""  # leave empty to use mocked estimates, or set to a provider name
-$env:TRIP_API_KEY = "YOUR_API_KEY"  # provider-specific
-npm start
-```
+### Static hosting
 
-Open http://localhost:3000 in your browser and use the new "From/To" controls and "Get Live Estimate" button.
+This project is static-only and can be hosted on any static host (for example GitHub Pages).
 
-Notes:
-- If you supply `TRIP_API_PROVIDER` and API credentials, extend `server.js` to call the provider-specific endpoints (Amadeus, Skyscanner/RapidAPI, etc.). The current server will use OpenStreetMap Nominatim to geocode city names and return plausible flight/drive estimates when no provider is configured.
-- Be mindful of Nominatim rate limits; for production use get a geocoding API key and cache results.
-
-### Deploy to Vercel
-
-You can deploy both the static site and the API to Vercel. Vercel will serve `index.html` as the static frontend and any files under `api/` as serverless functions (including `/api/estimate`).
-
-Quick steps:
-
-1. Push the repository to GitHub (already done).
-2. Go to https://vercel.com/new and import your GitHub repository.
-3. Vercel will detect the `api/` folder and create a serverless function for `/api/estimate`.
-4. After deployment the API will be available at `https://<your-deployment>.vercel.app/api/estimate`.
-
-Environment variables:
-
-- `TRIP_API_PROVIDER` and `TRIP_API_KEY` can be added in the Vercel dashboard under Project Settings → Environment Variables.
-
-Notes:
-
-- Vercel runs Node 18+ and supports global `fetch`. The included `api/estimate.js` uses OpenStreetMap Nominatim for geocoding — consider using a paid geocoding provider and caching for production.
-
-### Automatic deploy via GitHub Actions
-
-A workflow is included at `.github/workflows/deploy-vercel.yml` to deploy the site to Vercel automatically on pushes to `main`. To enable it:
-
-1. Create a Vercel token: go to https://vercel.com/account/tokens and generate a token.
-2. Get your Vercel Organization ID and Project ID from the Project settings (or use the Vercel dashboard when importing the repo).
-3. In your GitHub repo, go to Settings → Secrets and variables → Actions and add the following secrets:
-  - `VERCEL_TOKEN` — the token from step 1
-  - `VERCEL_ORG_ID` — your organization ID
-  - `VERCEL_PROJECT_ID` — your project ID
-4. Push to `main` and the workflow will run and deploy the site (serverless `/api/estimate` will be live at `/api/estimate`).
-
-Alternative: instead of the Actions workflow, connect your GitHub repo directly in the Vercel UI (https://vercel.com/new) and import the project — Vercel will deploy automatically without setting repo secrets.
+If you use a static host, ensure `airports.json` and `airports-small.json` are included in the published files.
 
 ## Model notes
 

@@ -8,7 +8,6 @@ const DEFAULT_FLIGHT_SPEED = 500; // mph, used when no user input is provided
 const DEFAULT_DRIVE_SPEED = 58; // mph, typical average used when unknown
 const AVG_SPEEDS = { train: 80, bus: 50, ferry: 30 };
 const CO2_PER_MILE = { train: 0.05, bus: 0.12, ferry: 0.04 };
-let lastLiveEstimates = null;
 
 const ids = [
   "fromCity",
@@ -51,6 +50,43 @@ const comparisonIdeas = [
   "Charging or fueling resilience: station availability, queue time, and detour distance.",
   "Total trip risk-adjusted cost: average plus worst-case 90th percentile travel day.",
 ];
+
+// Airport lists: small subset for fast datalist load, and full list for fuzzy search (loaded lazily)
+let airportsSmall = [];
+let airportsFull = null;
+let airportsFullLoaded = false;
+let airportsLoadingPromise = null;
+const SUGGESTION_MAX = 8;
+const suggestionDebounce = {};
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const toRad = (v) => (v * Math.PI) / 180;
+  const R = 3958.8; // miles
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function resolveAirport(query, list) {
+  if (!query) return null;
+  const qRaw = String(query).trim();
+  if (!qRaw) return null;
+  const q = qRaw.toLowerCase();
+
+  const codeMatch = qRaw.toUpperCase().match(/\b([A-Z]{3})\b/);
+  if (codeMatch) {
+    const code = codeMatch[1].toLowerCase();
+    const found = list.find((a) => String(a.code || '').toLowerCase() === code);
+    if (found) return found;
+  }
+
+  const exact = list.find((a) => String(a.code || '').toLowerCase() === q || String(a.name || '').toLowerCase() === q);
+  if (exact) return exact;
+
+  return list.find((a) => String(a.code || '').toLowerCase().includes(q) || String(a.name || '').toLowerCase().includes(q)) || null;
+}
 
 function value(id) {
   const input = state[id];
@@ -279,78 +315,6 @@ function render() {
 
   const results = buildModeModels().map((mode) => evaluateMode(mode, distance, valueOfTime));
 
-  // If we have live estimates, merge them into the main comparison.
-  if (lastLiveEstimates && Array.isArray(lastLiveEstimates.estimates)) {
-    const baseIds = new Set(results.map((r) => r.id));
-    const seat = seatProfiles[value("seatType")];
-    const passengers = Math.max(1, Number(value("passengers") || 1));
-    const driveSpeed = Number(value("driveSpeed")) || DEFAULT_DRIVE_SPEED;
-    const driveDeadhead = Number(value("driveDeadheadHours")) || 0;
-    const flightFixedTime = Number(value("flightFixedTime")) || 0;
-
-    lastLiveEstimates.estimates.forEach((est) => {
-      const id = String(est.mode || "").toLowerCase();
-      const price = Number(est.price || 0);
-      if (!id) return;
-
-      if (id === "flight") {
-        const flightMode = {
-          id: "flight",
-          name: `Fly ${seat.label} (live)`,
-          tags: ["Flight", "Live"],
-          fixedCost: price * seat.costMultiplier,
-          costPerMile: 0,
-          fixedTime: flightFixedTime,
-          hoursPerMile: 1 / DEFAULT_FLIGHT_SPEED,
-          fixedCo2: 0,
-          co2PerMile: value("flightCo2PerMile") * seat.co2Multiplier,
-        };
-        const evaluated = evaluateMode(flightMode, distance, valueOfTime);
-        const idx = results.findIndex((r) => r.id === "flight");
-        if (idx >= 0) results[idx] = evaluated;
-        else results.push(evaluated);
-        return;
-      }
-
-      if (id === "drive") {
-        const driveMode = {
-          id: "drive",
-          name: `Drive (live)`,
-          tags: ["Drive", "Live"],
-          fixedCost: price / passengers,
-          costPerMile: 0,
-          fixedTime: driveDeadhead,
-          hoursPerMile: 1 / driveSpeed,
-          fixedCo2: 0,
-          co2PerMile: CO2_PER_MILE['car'] || 0.2,
-        };
-        const evaluated = evaluateMode(driveMode, distance, valueOfTime);
-        const idx = results.findIndex((r) => r.id === "drive");
-        if (idx >= 0) results[idx] = evaluated;
-        else results.push(evaluated);
-        return;
-      }
-
-      // Add other modes (train, bus, etc.) if they aren't already present.
-      if (!baseIds.has(id)) {
-        const avgSpeed = AVG_SPEEDS[id] || 60;
-        const co2PerMile = CO2_PER_MILE[id] || 0.12;
-        const otherMode = {
-          id,
-          name: `${id.charAt(0).toUpperCase() + id.slice(1)} (live)`,
-          tags: ["Estimate", "Live"],
-          fixedCost: price,
-          costPerMile: 0,
-          fixedTime: 0,
-          hoursPerMile: 1 / avgSpeed,
-          fixedCo2: 0,
-          co2PerMile,
-        };
-        results.push(evaluateMode(otherMode, distance, valueOfTime));
-      }
-    });
-  }
-
   const flags = {
     bestCost: winnerId(results, "monetaryCost"),
     bestCo2: winnerId(results, "co2"),
@@ -381,68 +345,41 @@ async function fetchTripEstimate() {
     return;
   }
 
-  // If the user opened the static file directly (file://) or is serving
-  // the site from a static host (GitHub Pages), POST to /api/estimate will fail.
-  // Provide a clearer, actionable message in that case.
-  if (typeof location !== 'undefined' && location.protocol === 'file:') {
-    if (tripEstimateEl)
-      tripEstimateEl.innerHTML =
-        'Live estimates require the Node proxy. Run <code>npm install</code> and <code>npm start</code>, then open <a href="http://localhost:3000">http://localhost:3000</a> to use the feature.';
-    return;
-  }
-
-  const payload = {
-    from: value('fromCity'),
-    to: value('toCity'),
-    departDate: value('departDate'),
-    returnDate: value('returnDate'),
-    mode: 'all',
-    passengers: Number(state.passengers ? state.passengers.value : 1),
-    seatType: state.seatType ? state.seatType.value : 'economy',
-    gasPrice: value('gasPrice'),
-  };
-
-  if (tripEstimateEl) tripEstimateEl.textContent = 'Fetching estimate...';
+  if (tripEstimateEl) tripEstimateEl.textContent = 'Estimating distance...';
 
   try {
-    const resp = await fetch('/api/estimate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    await ensureAirportsFull();
+    const sourceList = Array.isArray(airportsFull) && airportsFull.length ? airportsFull : airportsSmall;
 
-    if (!resp.ok) {
-      const txt = await resp.text();
-      if (resp.status === 405) {
-        if (tripEstimateEl)
-          tripEstimateEl.innerHTML =
-            `Estimate failed: ${resp.status} Not Allowed. This typically means the API endpoint isn't reachable from this origin (for example: opening index.html directly or serving from a static host that doesn't proxy requests).\n\n` +
-            `Run the local server in the project directory with <code>npm install</code> then <code>npm start</code>, and open <a href="http://localhost:3000">http://localhost:3000</a>.` +
-            (txt ? `<div class="muted">Response: ${txt}</div>` : '');
-        return;
+    const fromMatch = resolveAirport(value('fromCity'), sourceList);
+    const toMatch = resolveAirport(value('toCity'), sourceList);
+
+    if (!fromMatch || !toMatch) {
+      if (tripEstimateEl) {
+        tripEstimateEl.textContent = 'Could not match one or both airports. Try a city name or IATA code (e.g., SEA, PHX).';
       }
-
-      if (tripEstimateEl) tripEstimateEl.textContent = `Estimate failed: ${resp.status} ${txt}`;
       return;
     }
 
-    const data = await resp.json();
-    // Save last live response (distance-only) and apply returned distance to UI
-    lastLiveEstimates = data;
-    // If the API returned matched airport info, populate the inputs with a consistent format
-    if (data && data.from && data.from.code && state.fromCity) {
-      state.fromCity.value = data.from.display || `${data.from.name} (${data.from.code})`;
-    }
-    if (data && data.to && data.to.code && state.toCity) {
-      state.toCity.value = data.to.display || `${data.to.name} (${data.to.code})`;
-    }
-    if (data && typeof data.distanceMiles === 'number' && state.distanceMiles) {
-      // update slider to match returned distance
-      state.distanceMiles.value = Math.round(data.distanceMiles);
-      updateOutputLabels();
+    const distanceMiles = Math.round(haversine(fromMatch.lat, fromMatch.lon, toMatch.lat, toMatch.lon) * 10) / 10;
+
+    state.fromCity.value = `${fromMatch.name} (${fromMatch.code})`;
+    state.toCity.value = `${toMatch.name} (${toMatch.code})`;
+    if (state.distanceMiles) {
+      state.distanceMiles.value = Math.round(distanceMiles);
     }
 
-    displayEstimate(data);
+    displayEstimate({
+      distanceMiles,
+      from: {
+        ...fromMatch,
+        display: `${fromMatch.name} (${fromMatch.code})`,
+      },
+      to: {
+        ...toMatch,
+        display: `${toMatch.name} (${toMatch.code})`,
+      },
+    });
     render();
   } catch (err) {
     if (tripEstimateEl) tripEstimateEl.textContent = `Estimate error: ${err.message}`;
@@ -463,12 +400,6 @@ function displayEstimate(data) {
   if (data && typeof data.distanceMiles === 'number') {
     parts.push(`<strong>Estimated distance:</strong> ${num(data.distanceMiles, 1)} mi`);
   }
-  if (data && Array.isArray(data.estimates)) {
-    data.estimates.forEach((e) => {
-      parts.push(`<div class="estimate-row"><strong>${e.mode.toUpperCase()}</strong>: ${money(e.price)} ${e.currency ?? ''} <span class="muted">(${e.provider ?? 'mock'})</span></div>`);
-    });
-  }
-
   if (parts.length === 0) {
     tripEstimateEl.textContent = 'No estimate available.';
     return;
@@ -545,10 +476,11 @@ async function loadAirports() {
   const airportsListEl = document.getElementById("airportsList");
   if (!airportsListEl) return;
   try {
-    const res = await fetch("/airports-small.json");
+    const res = await fetch("airports-small.json");
     if (!res.ok) return;
     const airports = await res.json();
-    airports.forEach(a => {
+    airportsSmall = airports;
+    airports.forEach((a) => {
       const option = document.createElement("option");
       // Show name (code) as the visible value when selected
       option.value = `${a.name} (${a.code})`;
@@ -561,4 +493,181 @@ async function loadAirports() {
 }
 
 loadAirports();
+render();
+
+// Lazy-load the full airports list for fuzzy searching when needed
+function ensureAirportsFull() {
+  if (airportsFullLoaded) return Promise.resolve(airportsFull);
+  if (airportsLoadingPromise) return airportsLoadingPromise;
+  airportsLoadingPromise = fetch('airports.json')
+    .then((r) => (r.ok ? r.json() : []))
+    .then((list) => {
+      airportsFull = list || [];
+      airportsFullLoaded = true;
+      airportsLoadingPromise = null;
+      return airportsFull;
+    })
+    .catch((err) => {
+      console.warn('Failed to load full airports list', err);
+      airportsFull = [];
+      airportsFullLoaded = true;
+      airportsLoadingPromise = null;
+      return airportsFull;
+    });
+  return airportsLoadingPromise;
+}
+
+function fuzzySearchAirports(q, maxResults = SUGGESTION_MAX) {
+  if (!q) return [];
+  const qq = q.toLowerCase();
+  const results = [];
+  // prioritize exact code, startsWith name/code, then includes
+  const exactCode = airportsFull.find((a) => a.code.toLowerCase() === qq);
+  if (exactCode) results.push(exactCode);
+
+  const starts = [];
+  const includes = [];
+  for (const a of airportsFull) {
+    const name = (a.name || '').toLowerCase();
+    const code = (a.code || '').toLowerCase();
+    if (code === qq) continue; // already added
+    if (name.startsWith(qq) || code.startsWith(qq)) starts.push(a);
+    else if (name.includes(qq) || code.includes(qq)) includes.push(a);
+  }
+
+  starts.sort((x, y) => x.name.localeCompare(y.name));
+  includes.sort((x, y) => x.name.localeCompare(y.name));
+
+  const merged = results.concat(starts, includes).slice(0, maxResults);
+  return merged;
+}
+
+function renderSuggestions(suggestionsEl, items, inputEl) {
+  suggestionsEl.innerHTML = '';
+  if (!items || items.length === 0) {
+    suggestionsEl.style.display = 'none';
+    suggestionsEl.setAttribute('aria-hidden', 'true');
+    return;
+  }
+  items.forEach((a, idx) => {
+    const div = document.createElement('div');
+    div.className = 'airport-suggestion-item';
+    div.setAttribute('role', 'option');
+    div.setAttribute('data-code', a.code);
+    div.setAttribute('data-lat', a.lat || '');
+    div.setAttribute('data-lon', a.lon || '');
+    div.textContent = `${a.name} (${a.code})`;
+    div.addEventListener('mousedown', (ev) => {
+      // use mousedown to capture before blur
+      ev.preventDefault();
+      inputEl.value = `${a.name} (${a.code})`;
+      suggestionsEl.innerHTML = '';
+      suggestionsEl.style.display = 'none';
+      suggestionsEl.setAttribute('aria-hidden', 'true');
+      // update distance output if desired (keep current behaviour)
+    });
+    suggestionsEl.appendChild(div);
+  });
+  suggestionsEl.style.display = 'block';
+  suggestionsEl.setAttribute('aria-hidden', 'false');
+}
+
+function hideSuggestions(el) {
+  if (!el) return;
+  el.innerHTML = '';
+  el.style.display = 'none';
+  el.setAttribute('aria-hidden', 'true');
+}
+
+function handleAirportInput(e) {
+  const inputEl = e.target;
+  const id = inputEl.id;
+  const suggestionsEl = document.getElementById(id === 'fromCity' ? 'fromSuggestions' : 'toSuggestions');
+  const q = String(inputEl.value || '').trim();
+
+  // If empty, hide
+  if (!q) {
+    hideSuggestions(suggestionsEl);
+    return;
+  }
+
+  // If user typed a 3-letter IATA code, try to auto-complete immediately
+  const iataMatch = q.match(/^([A-Za-z]{3})$/);
+  if (iataMatch) {
+    const code = iataMatch[1].toLowerCase();
+    // try small list first (very fast)
+    let found = airportsSmall.find((a) => a.code.toLowerCase() === code);
+    const tryApply = (a) => {
+      if (a) {
+        inputEl.value = `${a.name} (${a.code})`;
+        hideSuggestions(suggestionsEl);
+      }
+    };
+    if (found) {
+      tryApply(found);
+      return;
+    }
+    // otherwise ensure full list and try
+    ensureAirportsFull().then((list) => {
+      const f = (list || []).find((a) => a.code.toLowerCase() === code);
+      tryApply(f);
+    });
+    return;
+  }
+
+  // Debounce fuzzy search to keep UI snappy
+  if (suggestionDebounce[id]) clearTimeout(suggestionDebounce[id]);
+  suggestionDebounce[id] = setTimeout(() => {
+    ensureAirportsFull().then(() => {
+      const matches = fuzzySearchAirports(q, SUGGESTION_MAX);
+      renderSuggestions(suggestionsEl, matches, inputEl);
+    });
+  }, 150);
+}
+
+function handleAirportKeydown(e) {
+  const inputEl = e.target;
+  const id = inputEl.id;
+  const suggestionsEl = document.getElementById(id === 'fromCity' ? 'fromSuggestions' : 'toSuggestions');
+  const items = suggestionsEl ? Array.from(suggestionsEl.querySelectorAll('.airport-suggestion-item')) : [];
+  if (!items.length) return;
+  const activeIdx = items.findIndex((it) => it.classList.contains('active'));
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    const next = (activeIdx + 1) % items.length;
+    items.forEach((it) => it.classList.remove('active'));
+    items[next].classList.add('active');
+    items[next].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    const prev = activeIdx <= 0 ? items.length - 1 : activeIdx - 1;
+    items.forEach((it) => it.classList.remove('active'));
+    items[prev].classList.add('active');
+    items[prev].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') {
+    if (activeIdx >= 0) {
+      e.preventDefault();
+      const sel = items[activeIdx];
+      inputEl.value = sel.textContent;
+      hideSuggestions(suggestionsEl);
+    }
+  } else if (e.key === 'Escape') {
+    hideSuggestions(suggestionsEl);
+  }
+}
+
+// Attach input handlers for both From and To fields
+const fromEl = document.getElementById('fromCity');
+const toEl = document.getElementById('toCity');
+if (fromEl) {
+  fromEl.addEventListener('input', handleAirportInput);
+  fromEl.addEventListener('keydown', handleAirportKeydown);
+  fromEl.addEventListener('blur', (ev) => setTimeout(() => hideSuggestions(document.getElementById('fromSuggestions')), 150));
+}
+if (toEl) {
+  toEl.addEventListener('input', handleAirportInput);
+  toEl.addEventListener('keydown', handleAirportKeydown);
+  toEl.addEventListener('blur', (ev) => setTimeout(() => hideSuggestions(document.getElementById('toSuggestions')), 150));
+}
+
 render();
