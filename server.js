@@ -1,6 +1,6 @@
 const express = require('express');
-const fetch = require('node-fetch');
 const path = require('path');
+const airports = require('./airports.json');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,22 +18,19 @@ function haversine(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-async function geocode(query) {
+function getAirportCoords(query) {
   if (!query) return null;
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
-  const resp = await fetch(url, { headers: { 'User-Agent': 'drive-fly/1.0 (+https://tinyurl.com/drive-fly)' } });
-  if (!resp.ok) return null;
-  const arr = await resp.json();
-  if (!arr || !arr.length) return null;
-  return { lat: parseFloat(arr[0].lat), lon: parseFloat(arr[0].lon) };
+  const q = query.trim().toLowerCase();
+  const found = airports.find(a => a.code.toLowerCase() === q || a.name.toLowerCase() === q);
+  return found ? { lat: found.lat, lon: found.lon } : null;
 }
 
 app.post('/api/estimate', async (req, res) => {
   const { from, to, departDate, returnDate, mode = 'flight', passengers = 1, seatType = 'economy', gasPrice } = req.body;
 
   try {
-    const fromCoord = await geocode(from);
-    const toCoord = await geocode(to);
+    const fromCoord = getAirportCoords(from);
+    const toCoord = getAirportCoords(to);
 
     let distanceMiles = 600; // fallback
     if (fromCoord && toCoord) {

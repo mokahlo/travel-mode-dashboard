@@ -519,4 +519,23 @@ document.getElementById("resetBtn").addEventListener("click", () => {
 const estimateBtn = document.getElementById('getEstimateBtn');
 if (estimateBtn) estimateBtn.addEventListener('click', fetchTripEstimate);
 
+async function loadAirports() {
+  const airportsListEl = document.getElementById("airportsList");
+  if (!airportsListEl) return;
+  try {
+    const res = await fetch("/airports.json");
+    if (!res.ok) return;
+    const airports = await res.json();
+    airports.forEach(a => {
+      const option = document.createElement("option");
+      option.value = a.code;
+      option.textContent = `${a.name} (${a.code})`;
+      airportsListEl.appendChild(option);
+    });
+  } catch (e) {
+    console.warn("Failed to load airports list", e);
+  }
+}
+
+loadAirports();
 render();

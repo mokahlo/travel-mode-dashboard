@@ -34,15 +34,17 @@
         <div class="control-grid">
           <label>
             From (city / airport)
-            <input id="fromCity" type="text" placeholder="City or IATA code (e.g., Seattle, SEA)" />
+            <input id="fromCity" type="text" list="airportsList" placeholder="City or IATA code (e.g., Seattle, SEA)" />
             <span class="hint">Origin location for the trip. City name or airport code.</span>
           </label>
 
           <label>
             To (city / airport)
-            <input id="toCity" type="text" placeholder="City or IATA code (e.g., Phoenix, PHX)" />
+            <input id="toCity" type="text" list="airportsList" placeholder="City or IATA code (e.g., Phoenix, PHX)" />
             <span class="hint">Destination location for the trip. City name or airport code.</span>
           </label>
+
+          <datalist id="airportsList"></datalist>
 
           <label>
             Departure date
