@@ -52,8 +52,10 @@ app.post('/api/estimate', async (req, res) => {
       distanceMiles = Math.round(distanceMiles * 10) / 10;
     }
 
-    // Lightweight endpoint: return only distance between the two airports.
-    res.json({ distanceMiles });
+    // Lightweight endpoint: return distance and matched airport info.
+    const fromMatch = fromCoord ? { code: fromCoord.code, name: fromCoord.name } : null;
+    const toMatch = toCoord ? { code: toCoord.code, name: toCoord.name } : null;
+    res.json({ distanceMiles, from: fromMatch, to: toMatch });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

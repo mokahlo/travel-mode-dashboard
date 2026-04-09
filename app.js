@@ -429,6 +429,13 @@ async function fetchTripEstimate() {
     const data = await resp.json();
     // Save last live response (distance-only) and apply returned distance to UI
     lastLiveEstimates = data;
+    // If the API returned matched airport info, populate the inputs with a consistent format
+    if (data && data.from && data.from.code && state.fromCity) {
+      state.fromCity.value = `${data.from.name} (${data.from.code})`;
+    }
+    if (data && data.to && data.to.code && state.toCity) {
+      state.toCity.value = `${data.to.name} (${data.to.code})`;
+    }
     if (data && typeof data.distanceMiles === 'number' && state.distanceMiles) {
       // update slider to match returned distance
       state.distanceMiles.value = Math.round(data.distanceMiles);
@@ -445,6 +452,12 @@ async function fetchTripEstimate() {
 function displayEstimate(data) {
   if (!tripEstimateEl) return;
   const parts = [];
+  if (data && data.from) {
+    parts.push(`<div><strong>From:</strong> ${data.from.name} (${data.from.code})</div>`);
+  }
+  if (data && data.to) {
+    parts.push(`<div><strong>To:</strong> ${data.to.name} (${data.to.code})</div>`);
+  }
   if (data && typeof data.distanceMiles === 'number') {
     parts.push(`<strong>Estimated distance:</strong> ${num(data.distanceMiles, 1)} mi`);
   }
@@ -535,7 +548,8 @@ async function loadAirports() {
     const airports = await res.json();
     airports.forEach(a => {
       const option = document.createElement("option");
-      option.value = a.code;
+      // Show name (code) as the visible value when selected
+      option.value = `${a.name} (${a.code})`;
       option.textContent = `${a.name} (${a.code})`;
       airportsListEl.appendChild(option);
     });

@@ -55,8 +55,10 @@ module.exports = async (req, res) => {
       distanceMiles = Math.round(distanceMiles * 10) / 10;
     }
 
-    // API intentionally lightweight: return only the computed distance.
-    res.status(200).json({ distanceMiles });
+    // API intentionally lightweight: return computed distance and matched airport info.
+    const fromMatch = fromCoord ? { code: fromCoord.code, name: fromCoord.name } : null;
+    const toMatch = toCoord ? { code: toCoord.code, name: toCoord.name } : null;
+    res.status(200).json({ distanceMiles, from: fromMatch, to: toMatch });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || 'internal error' });
