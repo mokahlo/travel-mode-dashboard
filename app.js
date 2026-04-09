@@ -59,6 +59,17 @@ let airportsLoadingPromise = null;
 const SUGGESTION_MAX = 8;
 const suggestionDebounce = {};
 
+function getAirportSearchList() {
+  const merged = [...airportsSmall, ...(Array.isArray(airportsFull) ? airportsFull : [])];
+  const seen = new Set();
+  return merged.filter((airport) => {
+    const code = String(airport.code || '').toUpperCase();
+    if (!code || seen.has(code)) return false;
+    seen.add(code);
+    return true;
+  });
+}
+
 function haversine(lat1, lon1, lat2, lon2) {
   const toRad = (v) => (v * Math.PI) / 180;
   const R = 3958.8; // miles
@@ -86,6 +97,15 @@ function resolveAirport(query, list) {
   if (exact) return exact;
 
   return list.find((a) => String(a.code || '').toLowerCase().includes(q) || String(a.name || '').toLowerCase().includes(q)) || null;
+}
+
+function normalizeAirportInputValue(inputEl) {
+  if (!inputEl) return;
+  const sourceList = getAirportSearchList();
+  const match = resolveAirport(inputEl.value, sourceList);
+  if (match && /^[A-Za-z]{3}$/.test(String(inputEl.value || '').trim())) {
+    inputEl.value = `${match.name} (${match.code})`;
+  }
 }
 
 function value(id) {
@@ -349,7 +369,7 @@ async function fetchTripEstimate() {
 
   try {
     await ensureAirportsFull();
-    const sourceList = Array.isArray(airportsFull) && airportsFull.length ? airportsFull : airportsSmall;
+    const sourceList = getAirportSearchList();
 
     const fromMatch = resolveAirport(value('fromCity'), sourceList);
     const toMatch = resolveAirport(value('toCity'), sourceList);
@@ -591,27 +611,17 @@ function handleAirportInput(e) {
     return;
   }
 
-  // If user typed a 3-letter IATA code, try to auto-complete immediately
+  // If user typed a 3-letter IATA code, prefer exact-match suggestions,
+  // but don't overwrite what they typed while they're still editing.
   const iataMatch = q.match(/^([A-Za-z]{3})$/);
   if (iataMatch) {
     const code = iataMatch[1].toLowerCase();
-    // try small list first (very fast)
-    let found = airportsSmall.find((a) => a.code.toLowerCase() === code);
-    const tryApply = (a) => {
-      if (a) {
-        inputEl.value = `${a.name} (${a.code})`;
-        hideSuggestions(suggestionsEl);
-      }
-    };
-    if (found) {
-      tryApply(found);
+    const mergedList = getAirportSearchList();
+    const exactMatches = mergedList.filter((a) => a.code.toLowerCase() === code).slice(0, 1);
+    if (exactMatches.length) {
+      renderSuggestions(suggestionsEl, exactMatches, inputEl);
       return;
     }
-    // otherwise ensure full list and try
-    ensureAirportsFull().then((list) => {
-      const f = (list || []).find((a) => a.code.toLowerCase() === code);
-      tryApply(f);
-    });
     return;
   }
 
@@ -662,11 +672,13 @@ const toEl = document.getElementById('toCity');
 if (fromEl) {
   fromEl.addEventListener('input', handleAirportInput);
   fromEl.addEventListener('keydown', handleAirportKeydown);
+  fromEl.addEventListener('change', () => normalizeAirportInputValue(fromEl));
   fromEl.addEventListener('blur', (ev) => setTimeout(() => hideSuggestions(document.getElementById('fromSuggestions')), 150));
 }
 if (toEl) {
   toEl.addEventListener('input', handleAirportInput);
   toEl.addEventListener('keydown', handleAirportKeydown);
+  toEl.addEventListener('change', () => normalizeAirportInputValue(toEl));
   toEl.addEventListener('blur', (ev) => setTimeout(() => hideSuggestions(document.getElementById('toSuggestions')), 150));
 }
 
