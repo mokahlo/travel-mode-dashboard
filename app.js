@@ -1,6 +1,7 @@
 // Semantic versioning: major.minor.patch
 const APP_VERSION = "1.1.0";
 const HIGH_DEMAND_HEAT_INDEX = 105;
+const ROOM_TEMP_F = 72;
 
 const ids = [
   "unitSystem",
@@ -14,7 +15,6 @@ const ids = [
   "humidity",
   "dewPointF",
   "altitudeFt",
-  "hoursSinceIntake",
 ];
 
 const state = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
@@ -314,7 +314,7 @@ function calculateEvaporativeDemand(factors) {
   return { multiplier, heatIndex, highDemand: heatIndex > HIGH_DEMAND_HEAT_INDEX };
 }
 
-function calculateHydrationBenchmark(weightLbs, ageYears, factors, hoursSinceIntake) {
+function calculateHydrationBenchmark(weightLbs, ageYears, factors) {
   const baseOz = (Number(weightLbs) || 0) * 0.5;
   const ageAdjustmentOz = Number(ageYears) >= 55 ? 4 : Number(ageYears) < 18 ? -2 : 0;
   const adjustedBaseOz = Math.max(0, baseOz + ageAdjustmentOz);
@@ -323,30 +323,30 @@ function calculateHydrationBenchmark(weightLbs, ageYears, factors, hoursSinceInt
   const acclMultiplier = ({ low: 1.08, moderate: 1.03, high: 0.95 })[String(factors.acclimatizationLevel || "moderate")] ?? 1.0;
 
   const evap = calculateEvaporativeDemand(factors);
-  const metabolicMultiplier = 1 + clamp((Number(hoursSinceIntake) || 0) * 0.02, 0, 0.24);
-
   const idealDailyOz = adjustedBaseOz * sexMultiplier * acclMultiplier * evap.multiplier;
   const idealHourlyOz = idealDailyOz / 24;
-  const windowTargetOz = idealHourlyOz * Math.max(1, Number(hoursSinceIntake) || 1);
 
   const activityBaseLossMlPerHour = ({ sedentary: 55, moderate: 95, active: 150 })[String(factors.activityLevel || "sedentary")] ?? 55;
   const dehydrationRateMlPerHour = activityBaseLossMlPerHour * evap.multiplier;
+  const recommendedRateMlPerHour = Math.max(ozToMl(idealHourlyOz), dehydrationRateMlPerHour * 1.15);
 
   return {
     idealDailyOz,
     idealHourlyOz,
-    windowTargetOz,
+    recommendedRateMlPerHour,
     dehydrationRateMlPerHour,
     evaporativeMultiplier: evap.multiplier,
     heatIndex: evap.heatIndex,
     highDemand: evap.highDemand,
-    metabolicMultiplier,
   };
 }
 
 function buildModeModels() {
+  const hoursOutside = Math.max(0, Number(value("hoursOutside") || 0));
+  const effectiveTempF = hoursOutside <= 0 ? ROOM_TEMP_F : getTempFCanonical();
+
   const factors = {
-    tempF: getTempFCanonical(),
+    tempF: effectiveTempF,
     humidity: Number(value("humidity") || 0),
     dewPointF: getDewPointFCanonical(),
     activityLevel: value("activityLevel") || "sedentary",
@@ -355,44 +355,50 @@ function buildModeModels() {
     altitudeFt: getAltitudeFtCanonical(),
   };
 
-  const hoursSinceIntake = Number(value("hoursSinceIntake") || 0);
-  const profile = calculateHydrationBenchmark(getWeightLbsCanonical(), Number(value("ageYears") || 0), factors, hoursSinceIntake);
+  const profile = calculateHydrationBenchmark(getWeightLbsCanonical(), Number(value("ageYears") || 0), factors);
 
   const dryScenarioRate = profile.dehydrationRateMlPerHour * 1.2;
+  const dryScenarioRecommendedRate = Math.max(profile.recommendedRateMlPerHour * 1.1, dryScenarioRate * 1.15);
 
   return [
     {
       id: "ideal_intake",
-      name: "Estimated Ideal Intake",
+      name: "Recommended Hydration Rate",
       idealDailyOz: profile.idealDailyOz,
-      windowTargetOz: profile.windowTargetOz,
+      recommendedRateMlPerHour: profile.recommendedRateMlPerHour,
       dehydrationRateMlPerHour: profile.dehydrationRateMlPerHour,
       evaporativeMultiplier: profile.evaporativeMultiplier,
       heatIndex: profile.heatIndex,
       highDemand: profile.highDemand,
+      effectiveTempF,
+      usedRoomTemp: hoursOutside <= 0,
     },
     {
       id: "dehydration_outlook",
       name: "Dehydration Outlook",
       idealDailyOz: profile.idealDailyOz,
-      windowTargetOz: profile.windowTargetOz,
+      recommendedRateMlPerHour: dryScenarioRecommendedRate,
       dehydrationRateMlPerHour: dryScenarioRate,
       evaporativeMultiplier: profile.evaporativeMultiplier,
       heatIndex: profile.heatIndex,
       highDemand: profile.highDemand,
+      effectiveTempF,
+      usedRoomTemp: hoursOutside <= 0,
     },
   ];
 }
 
 function evaluateMode(mode) {
+  const recommendedRateOzPerHour = mlToOz(mode.recommendedRateMlPerHour);
   const dehydrationRateOzPerHour = mlToOz(mode.dehydrationRateMlPerHour);
-  const projectedWindowLossOz = dehydrationRateOzPerHour * Math.max(1, Number(value("hoursSinceIntake") || 1));
-  const riskScore = clamp(projectedWindowLossOz * 3 + (mode.highDemand ? 15 : 0), 0, 100);
+  const netHydrationRateOzPerHour = recommendedRateOzPerHour - dehydrationRateOzPerHour;
+  const riskScore = clamp(dehydrationRateOzPerHour * 9 + (netHydrationRateOzPerHour < 0 ? 15 : 0) + (mode.highDemand ? 15 : 0), 0, 100);
 
   return {
     ...mode,
+    recommendedRateOzPerHour,
     dehydrationRateOzPerHour,
-    projectedWindowLossOz,
+    netHydrationRateOzPerHour,
     riskScore,
   };
 }
@@ -407,9 +413,10 @@ function winnerIdMax(results, key) {
 
 function buildCard(result, flags, index) {
   const units = unitSystem();
+  const recommendedLabel = units === "si" ? `${num(result.recommendedRateMlPerHour, 0)} ml/h` : `${num(result.recommendedRateOzPerHour, 1)} oz/h`;
   const rateLabel = units === "si" ? `${num(result.dehydrationRateMlPerHour, 0)} ml/h` : `${num(result.dehydrationRateOzPerHour, 1)} oz/h`;
   const dailyLabel = units === "si" ? `${num(ozToMl(result.idealDailyOz), 0)} ml/day` : `${num(result.idealDailyOz, 1)} oz/day`;
-  const windowLabel = units === "si" ? `${num(ozToMl(result.windowTargetOz), 0)} ml` : `${num(result.windowTargetOz, 1)} oz`;
+  const netLabel = units === "si" ? `${num(ozToMl(result.netHydrationRateOzPerHour), 0)} ml/h` : `${num(result.netHydrationRateOzPerHour, 1)} oz/h`;
 
   const card = document.createElement("article");
   card.className = "card";
@@ -424,9 +431,9 @@ function buildCard(result, flags, index) {
     <h4>${result.name}</h4>
     <div>${pills.join(" ")}</div>
     <p class="metric">Ideal daily intake: <strong>${dailyLabel}</strong></p>
-    <p class="metric">Recommended window intake: <strong>${windowLabel}</strong></p>
+    <p class="metric">Recommended intake rate: <strong>${recommendedLabel}</strong></p>
     <p class="metric">Estimated dehydration rate: <strong>${rateLabel}</strong></p>
-    <p class="metric">Projected window fluid loss: <strong>${units === "si" ? `${num(ozToMl(result.projectedWindowLossOz), 0)} ml` : `${num(result.projectedWindowLossOz, 1)} oz`}</strong></p>
+    <p class="metric">Net hydration buffer rate: <strong>${netLabel}</strong></p>
     <p class="metric">Dehydration risk index: <strong>${num(result.riskScore, 0)}</strong></p>
   `;
 
@@ -437,11 +444,11 @@ function normalizedBars(results) {
   const units = unitSystem();
   const dims = [
     {
-      key: "idealDailyOz",
-      label: "Ideal Daily Intake",
+      key: "recommendedRateOzPerHour",
+      label: "Recommended Intake Rate",
       cls: "cost",
-      suffix: units === "si" ? "ml/day" : "oz/day",
-      mapValue: (r) => (units === "si" ? ozToMl(r.idealDailyOz) : r.idealDailyOz),
+      suffix: units === "si" ? "ml/h" : "oz/h",
+      mapValue: (r) => (units === "si" ? r.recommendedRateMlPerHour : r.recommendedRateOzPerHour),
     },
     {
       key: "dehydrationRateOzPerHour",
@@ -451,11 +458,11 @@ function normalizedBars(results) {
       mapValue: (r) => (units === "si" ? r.dehydrationRateMlPerHour : r.dehydrationRateOzPerHour),
     },
     {
-      key: "projectedWindowLossOz",
-      label: "Projected Window Loss",
+      key: "netHydrationRateOzPerHour",
+      label: "Net Hydration Buffer Rate",
       cls: "time",
-      suffix: units === "si" ? "ml" : "oz",
-      mapValue: (r) => (units === "si" ? ozToMl(r.projectedWindowLossOz) : r.projectedWindowLossOz),
+      suffix: units === "si" ? "ml/h" : "oz/h",
+      mapValue: (r) => (units === "si" ? ozToMl(r.netHydrationRateOzPerHour) : r.netHydrationRateOzPerHour),
     },
   ];
 
@@ -495,8 +502,8 @@ function buildInsights(results) {
 
   insights.push(
     units === "si"
-      ? `Estimated ideal daily intake is ${num(ozToMl(ideal.idealDailyOz), 0)} ml/day, with ${num(ozToMl(ideal.windowTargetOz), 0)} ml recommended for the current window.`
-      : `Estimated ideal daily intake is ${num(ideal.idealDailyOz, 1)} oz/day, with ${num(ideal.windowTargetOz, 1)} oz recommended for the current window.`
+      ? `Estimated ideal daily intake is ${num(ozToMl(ideal.idealDailyOz), 0)} ml/day, with a recommended intake rate of ${num(ideal.recommendedRateMlPerHour, 0)} ml/h.`
+      : `Estimated ideal daily intake is ${num(ideal.idealDailyOz, 1)} oz/day, with a recommended intake rate of ${num(ideal.recommendedRateOzPerHour, 1)} oz/h.`
   );
 
   insights.push(
@@ -525,7 +532,7 @@ function updateOutputLabels() {
       humidity: `${num(v, 0)}%`,
       dewPointF: units === "si" ? `${num(v, 0)} °C` : `${num(v, 0)} °F`,
       altitudeFt: units === "si" ? `${num(v, 0)} m` : `${num(v, 0)} ft`,
-      hoursSinceIntake: `${num(v, 1)} h`,
+      hoursOutside: `${num(v, 1)} h`,
     };
 
     node.textContent = unitMap[id] ?? String(v);
@@ -555,7 +562,10 @@ function render() {
 
   if (tripEstimateEl) {
     const thresholdText = units === "si" ? `${num(fToC(HIGH_DEMAND_HEAT_INDEX), 1)}°C` : `${num(HIGH_DEMAND_HEAT_INDEX, 1)}°F`;
-    tripEstimateEl.innerHTML = `<strong>High Demand:</strong> ${lead.highDemand ? "YES" : "No"} <span class="muted">(threshold: heat index > ${thresholdText})</span>`;
+    const displayedEffectiveTemp = units === "si" ? fToC(lead.effectiveTempF) : lead.effectiveTempF;
+    const tempUnit = units === "si" ? "°C" : "°F";
+    const tempSource = lead.usedRoomTemp ? "room temperature fallback" : "ambient/weather temperature";
+    tripEstimateEl.innerHTML = `<strong>High Demand:</strong> ${lead.highDemand ? "YES" : "No"} <span class="muted">(threshold: heat index > ${thresholdText})</span><br/><span class="muted">Effective temperature: ${num(displayedEffectiveTemp, 1)}${tempUnit} (${tempSource})</span>`;
   }
 
   updateOutputLabels();
@@ -581,7 +591,7 @@ document.getElementById("resetBtn").addEventListener("click", () => {
     humidity: "14",
     dewPointF: "33",
     altitudeFt: "1086",
-    hoursSinceIntake: "3",
+    hoursOutside: "1",
   };
 
   Object.entries(defaults).forEach(([id, val]) => {
