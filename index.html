@@ -92,6 +92,13 @@
           </label>
 
           <label>
+            Hours outside
+            <input id="hoursOutside" type="range" min="0" max="12" step="0.5" value="1" />
+            <span data-output="hoursOutside"></span>
+            <span class="hint">If set to <strong>0</strong>, temperature in the model defaults to room temperature.</span>
+          </label>
+
+          <label>
             City name (weather source)
             <input id="cityName" type="text" value="Phoenix" placeholder="e.g., Phoenix" />
             <button id="loadWeatherBtn" type="button" class="estimate-btn">Auto-fill Weather by City</button>
@@ -104,7 +111,7 @@
             Temperature
             <input id="tempF" type="range" min="60" max="125" step="1" value="104" />
             <span data-output="tempF"></span>
-            <span class="hint">Ambient air temperature. Values above <strong>100°F</strong> can sharply increase hydration demand.</span>
+            <span class="hint">Ambient air temperature. Values above <strong>100°F</strong> can sharply increase hydration demand. If <strong>Hours outside = 0</strong>, model uses room temperature instead.</span>
           </label>
 
           <label>
