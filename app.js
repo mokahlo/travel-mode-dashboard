@@ -11,6 +11,7 @@ const FLUID_COEFFICIENTS = {
 const HIGH_DEMAND_HEAT_INDEX = 105;
 
 const ids = [
+  "unitSystem",
   "cityName",
   "weightLbs",
   "ageYears",
@@ -22,7 +23,7 @@ const ids = [
   "dewPointF",
   "altitudeFt",
   "hoursSinceIntake",
-  "intakeVolumeMl",
+  "intakeRate",
   "fluidType",
 ];
 
@@ -67,6 +68,38 @@ function mlToOz(ml) {
   return (Number(ml) || 0) * 0.033814;
 }
 
+function ozToMl(oz) {
+  return (Number(oz) || 0) * 29.5735;
+}
+
+function lbsToKg(lbs) {
+  return (Number(lbs) || 0) * 0.45359237;
+}
+
+function kgToLbs(kg) {
+  return (Number(kg) || 0) * 2.2046226218;
+}
+
+function fToC(f) {
+  return ((Number(f) || 0) - 32) * (5 / 9);
+}
+
+function cToF(c) {
+  return (Number(c) || 0) * (9 / 5) + 32;
+}
+
+function ftToM(ft) {
+  return (Number(ft) || 0) * 0.3048;
+}
+
+function mToFt(m) {
+  return (Number(m) || 0) * 3.28084;
+}
+
+function unitSystem() {
+  return String(value("unitSystem") || "us").toLowerCase() === "si" ? "si" : "us";
+}
+
 function clamp(valueToClamp, min, max) {
   return Math.max(min, Math.min(max, valueToClamp));
 }
@@ -99,6 +132,92 @@ function setFieldIfFinite(fieldId, value, transform = (v) => v) {
   if (!state[fieldId]) return false;
   state[fieldId].value = String(transform(numeric));
   return true;
+}
+
+function getWeightLbsCanonical() {
+  const raw = Number(value("weightLbs") || 0);
+  return unitSystem() === "si" ? kgToLbs(raw) : raw;
+}
+
+function getTempFCanonical() {
+  const raw = Number(value("tempF") || 0);
+  return unitSystem() === "si" ? cToF(raw) : raw;
+}
+
+function getDewPointFCanonical() {
+  const raw = Number(value("dewPointF") || 0);
+  return unitSystem() === "si" ? cToF(raw) : raw;
+}
+
+function getAltitudeFtCanonical() {
+  const raw = Number(value("altitudeFt") || 0);
+  return unitSystem() === "si" ? mToFt(raw) : raw;
+}
+
+function getIntakeRateMlPerHourCanonical() {
+  const raw = Number(value("intakeRate") || 0);
+  return unitSystem() === "si" ? raw : ozToMl(raw);
+}
+
+function setInputConstraintsForUnitSystem(system) {
+  if (state.weightLbs) {
+    state.weightLbs.min = system === "si" ? "27" : "60";
+    state.weightLbs.max = system === "si" ? "181" : "400";
+    state.weightLbs.step = "1";
+  }
+
+  if (state.tempF) {
+    state.tempF.min = system === "si" ? "16" : "60";
+    state.tempF.max = system === "si" ? "52" : "125";
+    state.tempF.step = "1";
+  }
+
+  if (state.dewPointF) {
+    state.dewPointF.min = system === "si" ? "-12" : "10";
+    state.dewPointF.max = system === "si" ? "24" : "75";
+    state.dewPointF.step = "1";
+  }
+
+  if (state.altitudeFt) {
+    state.altitudeFt.min = "0";
+    state.altitudeFt.max = system === "si" ? "2750" : "9000";
+    state.altitudeFt.step = system === "si" ? "50" : "100";
+  }
+
+  if (state.intakeRate) {
+    state.intakeRate.min = "0";
+    state.intakeRate.max = system === "si" ? "1500" : "50";
+    state.intakeRate.step = system === "si" ? "10" : "0.5";
+  }
+}
+
+function convertDisplayedValuesForUnitSystem(currentSystem, nextSystem) {
+  if (currentSystem === nextSystem) {
+    setInputConstraintsForUnitSystem(nextSystem);
+    return;
+  }
+
+  const temp = Number(value("tempF") || 0);
+  const dew = Number(value("dewPointF") || 0);
+  const altitude = Number(value("altitudeFt") || 0);
+  const weight = Number(value("weightLbs") || 0);
+  const intakeRate = Number(value("intakeRate") || 0);
+
+  if (nextSystem === "si") {
+    if (state.tempF) state.tempF.value = String(Math.round(fToC(temp)));
+    if (state.dewPointF) state.dewPointF.value = String(Math.round(fToC(dew)));
+    if (state.altitudeFt) state.altitudeFt.value = String(Math.round(ftToM(altitude)));
+    if (state.weightLbs) state.weightLbs.value = String(Math.round(lbsToKg(weight)));
+    if (state.intakeRate) state.intakeRate.value = String(Math.round(ozToMl(intakeRate)));
+  } else {
+    if (state.tempF) state.tempF.value = String(Math.round(cToF(temp)));
+    if (state.dewPointF) state.dewPointF.value = String(Math.round(cToF(dew)));
+    if (state.altitudeFt) state.altitudeFt.value = String(Math.round(mToFt(altitude)));
+    if (state.weightLbs) state.weightLbs.value = String(Math.round(kgToLbs(weight)));
+    if (state.intakeRate) state.intakeRate.value = String((mlToOz(intakeRate)).toFixed(1));
+  }
+
+  setInputConstraintsForUnitSystem(nextSystem);
 }
 
 function extractFirstFinite(values) {
@@ -176,11 +295,15 @@ async function populateEnvironmentalFactorsFromCity() {
       state.cityName.value = data.normalizedQuery;
     }
 
+    const selectedUnits = unitSystem();
+
     const updates = [
-      setFieldIfFinite("tempF", data.tempF, (v) => Math.round(v)),
+      setFieldIfFinite("tempF", data.tempF, (v) => (selectedUnits === "si" ? Math.round(fToC(v)) : Math.round(v))),
       setFieldIfFinite("humidity", data.humidity, (v) => Math.round(v)),
-      setFieldIfFinite("dewPointF", data.dewPointF, (v) => Math.round(v)),
-      setFieldIfFinite("altitudeFt", data.altitudeFt, (v) => Math.round(v / 100) * 100),
+      setFieldIfFinite("dewPointF", data.dewPointF, (v) => (selectedUnits === "si" ? Math.round(fToC(v)) : Math.round(v))),
+      setFieldIfFinite("altitudeFt", data.altitudeFt, (v) =>
+        selectedUnits === "si" ? Math.round(ftToM(v) / 50) * 50 : Math.round(v / 100) * 100
+      ),
     ];
 
     if (weatherLocationEl) {
@@ -291,19 +414,20 @@ function buildModeModels() {
   const fluidProfile = FLUID_COEFFICIENTS[fluidType] || FLUID_COEFFICIENTS.water;
 
   const factors = {
-    tempF: Number(value("tempF") || 0),
+    tempF: getTempFCanonical(),
     humidity: Number(value("humidity") || 0),
-    dewPointF: Number(value("dewPointF") || 0),
+    dewPointF: getDewPointFCanonical(),
     activityLevel: value("activityLevel") || "sedentary",
     sexAssignedAtBirth: value("sexAssignedAtBirth") || "unspecified",
     acclimatizationLevel: value("acclimatizationLevel") || "moderate",
-    altitudeFt: Number(value("altitudeFt") || 0),
+    altitudeFt: getAltitudeFtCanonical(),
   };
 
   const hoursSinceIntake = Number(value("hoursSinceIntake") || 0);
-  const userWeightLbs = Number(value("weightLbs") || 0);
+  const userWeightLbs = getWeightLbsCanonical();
   const userAgeYears = Number(value("ageYears") || 0);
-  const intakeVolumeMl = Number(value("intakeVolumeMl") || 0);
+  const intakeRateMlPerHour = getIntakeRateMlPerHourCanonical();
+  const intakeVolumeMl = intakeRateMlPerHour * Math.max(0, hoursSinceIntake);
 
   const userBenchmark = calculateHydrationBenchmark(userWeightLbs, userAgeYears, factors, hoursSinceIntake);
 
@@ -435,19 +559,20 @@ function buildInsights(results) {
 }
 
 function updateOutputLabels() {
+  const units = unitSystem();
   document.querySelectorAll("[data-output]").forEach((node) => {
     const id = node.getAttribute("data-output");
     const v = value(id);
 
     const unitMap = {
-      weightLbs: `${num(v, 0)} lbs`,
+      weightLbs: units === "si" ? `${num(v, 0)} kg` : `${num(v, 0)} lbs`,
       ageYears: `${num(v, 0)} years`,
-      tempF: `${num(v, 0)} °F`,
+      tempF: units === "si" ? `${num(v, 0)} °C` : `${num(v, 0)} °F`,
       humidity: `${num(v, 0)}%`,
-      dewPointF: `${num(v, 0)} °F`,
-      altitudeFt: `${num(v, 0)} ft`,
+      dewPointF: units === "si" ? `${num(v, 0)} °C` : `${num(v, 0)} °F`,
+      altitudeFt: units === "si" ? `${num(v, 0)} m` : `${num(v, 0)} ft`,
       hoursSinceIntake: `${num(v, 1)} h`,
-      intakeVolumeMl: `${num(v, 0)} ml`,
+      intakeRate: units === "si" ? `${num(v, 0)} ml/h` : `${num(v, 1)} oz/h`,
     };
 
     node.textContent = unitMap[id] ?? String(v);
@@ -473,12 +598,18 @@ function render() {
   ideaListEl.innerHTML = comparisonIdeas.map((msg) => `<li>${msg}</li>`).join("");
 
   const lead = results.find((r) => r.id === "user_intake") || results[0];
-  effectiveHeatIndexEl.textContent = `${num(lead.heatIndex, 1)} °F`;
+  const units = unitSystem();
+  const displayedHeatIndex = units === "si" ? fToC(lead.heatIndex) : lead.heatIndex;
+  effectiveHeatIndexEl.textContent = units === "si" ? `${num(displayedHeatIndex, 1)} °C` : `${num(displayedHeatIndex, 1)} °F`;
   effectiveEvapMultiplierEl.textContent = `${num(lead.evaporativeMultiplier, 2)}×`;
 
   if (tripEstimateEl) {
     const highDemandText = lead.highDemand ? "YES" : "No";
-    tripEstimateEl.innerHTML = `<strong>High Demand:</strong> ${highDemandText} <span class="muted">(threshold: heat index > ${HIGH_DEMAND_HEAT_INDEX}°F)</span>`;
+    const thresholdText =
+      units === "si"
+        ? `${num(fToC(HIGH_DEMAND_HEAT_INDEX), 1)}°C`
+        : `${num(HIGH_DEMAND_HEAT_INDEX, 1)}°F`;
+    tripEstimateEl.innerHTML = `<strong>High Demand:</strong> ${highDemandText} <span class="muted">(threshold: heat index > ${thresholdText})</span>`;
   }
 
   updateOutputLabels();
@@ -493,6 +624,7 @@ ids.forEach((id) => {
 
 document.getElementById("resetBtn").addEventListener("click", () => {
   const defaults = {
+    unitSystem: "us",
     cityName: "Phoenix",
     weightLbs: "180",
     ageYears: "38",
@@ -504,9 +636,8 @@ document.getElementById("resetBtn").addEventListener("click", () => {
     dewPointF: "33",
     altitudeFt: "1086",
     hoursSinceIntake: "3",
-    intakeVolumeMl: "900",
+    intakeRate: "10.1",
     fluidType: "water",
-    peerWeightLbs: "170",
   };
 
   Object.entries(defaults).forEach(([id, val]) => {
@@ -516,8 +647,20 @@ document.getElementById("resetBtn").addEventListener("click", () => {
   if (weatherLocationEl) weatherLocationEl.textContent = "";
   if (weatherStatusEl) weatherStatusEl.textContent = "";
 
+  setInputConstraintsForUnitSystem("us");
+
   render();
 });
+
+if (state.unitSystem) {
+  let activeUnitSystem = unitSystem();
+  state.unitSystem.addEventListener("change", () => {
+    const next = unitSystem();
+    convertDisplayedValuesForUnitSystem(activeUnitSystem, next);
+    activeUnitSystem = next;
+    render();
+  });
+}
 
 if (loadWeatherBtn) {
   loadWeatherBtn.addEventListener("click", populateEnvironmentalFactorsFromCity);
@@ -531,5 +674,7 @@ if (state.cityName) {
     }
   });
 }
+
+setInputConstraintsForUnitSystem(unitSystem());
 
 render();

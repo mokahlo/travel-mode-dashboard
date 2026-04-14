@@ -13,9 +13,11 @@ HydroLogix is an interactive hydration benchmarking app focused on hot, dry Sout
   - altitude
   - activity level
 - Applies a metabolic-window multiplier for hours since last intake
+- Uses intake rate with metabolic window (`intake rate × hours since last intake`) to estimate effective intake volume
 - Triggers a **High Demand** state when heat index crosses threshold
 - Renders comparison cards, normalized bars, and actionable insights
 - Auto-fills environmental factors from **city name only** in-browser (Open-Meteo geocoding + weather APIs)
+- Supports a US/SI unit toggle for unit-based entries (weight, temperature, dew point, altitude, and intake rate)
 
 ## Core logic
 

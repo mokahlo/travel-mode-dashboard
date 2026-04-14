@@ -38,7 +38,16 @@
 
         <div class="control-grid">
           <label>
-            User weight (lbs)
+            Unit system
+            <select id="unitSystem">
+              <option value="us">US customary</option>
+              <option value="si">SI metric</option>
+            </select>
+            <span class="hint">Switches all unit-based inputs and readouts between US and SI values.</span>
+          </label>
+
+          <label>
+            User weight
             <input id="weightLbs" type="number" min="60" max="400" step="1" value="180" />
             <span data-output="weightLbs"></span>
             <span class="hint">Used for baseline hydration need. Rule of thumb: about <strong>0.5 oz per lb/day</strong> before climate multipliers.</span>
@@ -92,7 +101,7 @@
           </label>
 
           <label>
-            Temperature (°F)
+            Temperature
             <input id="tempF" type="range" min="60" max="125" step="1" value="104" />
             <span data-output="tempF"></span>
             <span class="hint">Ambient air temperature. Values above <strong>100°F</strong> can sharply increase hydration demand.</span>
@@ -106,14 +115,14 @@
           </label>
 
           <label>
-            Dew point (°F)
+            Dew point
             <input id="dewPointF" type="range" min="10" max="75" step="1" value="33" />
             <span data-output="dewPointF"></span>
             <span class="hint">Another dryness signal: lower dew point generally means drier air and greater fluid loss risk.</span>
           </label>
 
           <label>
-            Altitude (ft)
+            Altitude
             <input id="altitudeFt" type="range" min="0" max="9000" step="100" value="1086" />
             <span data-output="altitudeFt"></span>
             <span class="hint">Elevation above sea level. Higher altitude adds a mild hydration burden (especially over 4,000 ft).</span>
@@ -127,10 +136,10 @@
           </label>
 
           <label>
-            Intake volume (ml)
-            <input id="intakeVolumeMl" type="number" min="0" max="5000" step="10" value="900" />
-            <span data-output="intakeVolumeMl"></span>
-            <span class="hint">Amount consumed in this window. Quick reference: <strong>500 ml ≈ 16.9 oz</strong>.</span>
+            Intake rate
+            <input id="intakeRate" type="number" min="0" max="1500" step="10" value="300" />
+            <span data-output="intakeRate"></span>
+            <span class="hint">Average fluid intake rate during this period. Effective intake is rate × hours since last intake.</span>
           </label>
 
           <label>
