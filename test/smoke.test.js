@@ -47,7 +47,7 @@ async function startServer() {
 
     child.stdout.on('data', (chunk) => {
       const text = String(chunk);
-      if (text.includes('drive-fly server listening')) {
+      if (text.includes('HydroLogix server listening')) {
         clearTimeout(timeout);
         resolve();
       }

@@ -76,7 +76,7 @@ if (-not $SkipInstall) {
 }
 
 if (-not $SkipServer) {
-  $serverJobName = 'drive-fly-server'
+  $serverJobName = 'hydrologix-server'
 
   if ($DryRun) {
     Write-Host "[DryRun] Start-Job -Name $serverJobName -ScriptBlock { Set-Location '$PSScriptRoot'; <prepend node path if needed>; npm start }"

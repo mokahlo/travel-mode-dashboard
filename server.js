@@ -79,5 +79,5 @@ app.post('/api/estimate', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`drive-fly server listening on http://localhost:${PORT}`);
+  console.log(`HydroLogix server listening on http://localhost:${PORT}`);
 });

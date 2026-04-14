@@ -1,6 +1,6 @@
-# drive-fly — Travel Mode Analysis Dashboard
+# HydroLogix — Travel Mode Analysis Dashboard
 
-Repository: https://tinyurl.com/drive-fly
+Repository: HydroLogix
 
 Interactive dashboard for exploring cost, emissions, and time trade-offs across travel modes.
 

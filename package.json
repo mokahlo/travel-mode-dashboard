@@ -1,5 +1,5 @@
 {
-  "name": "drive-fly",
+  "name": "hydrologix",
   "version": "0.1.0",
   "description": "Travel mode dashboard with live trip estimate proxy",
   "main": "server.js",
