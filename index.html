@@ -38,15 +38,6 @@
 
         <div class="control-grid">
           <label>
-            City name (weather source)
-            <input id="cityName" type="text" value="Phoenix, AZ" placeholder="e.g., Phoenix, AZ" />
-            <button id="loadWeatherBtn" type="button" class="estimate-btn">Auto-fill Weather by City</button>
-            <span class="hint">Type a city like <strong>Phoenix, AZ</strong> or <strong>Denver</strong>. This browser-only lookup fills temperature, humidity, dew point, and altitude.</span>
-            <span id="weatherLocation" class="muted"></span>
-            <span id="weatherStatus" class="muted"></span>
-          </label>
-
-          <label>
             User weight (lbs)
             <input id="weightLbs" type="number" min="60" max="400" step="1" value="180" />
             <span data-output="weightLbs"></span>
@@ -58,6 +49,15 @@
             <input id="ageYears" type="number" min="12" max="100" step="1" value="38" />
             <span data-output="ageYears"></span>
             <span class="hint">Age makes a small baseline adjustment. Example: older adults may require a slightly higher target.</span>
+          </label>
+
+          <label>
+            City name (weather source)
+            <input id="cityName" type="text" value="Phoenix, AZ" placeholder="e.g., Phoenix, AZ" />
+            <button id="loadWeatherBtn" type="button" class="estimate-btn">Auto-fill Weather by City</button>
+            <span class="hint">Type a city like <strong>Phoenix, AZ</strong> or <strong>Denver</strong>. This browser-only lookup fills temperature, humidity, dew point, and altitude.</span>
+            <span id="weatherLocation" class="muted"></span>
+            <span id="weatherStatus" class="muted"></span>
           </label>
 
           <label>

@@ -87,6 +87,19 @@ function weatherStatus(message, isError = false) {
     : safe;
 }
 
+function toFiniteNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function setFieldIfFinite(fieldId, value, transform = (v) => v) {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) return false;
+  if (!state[fieldId]) return false;
+  state[fieldId].value = String(transform(numeric));
+  return true;
+}
+
 async function fetchWeatherByCityName(cityName) {
   const query = String(cityName || "").trim();
   if (!query) {
@@ -122,10 +135,12 @@ async function fetchWeatherByCityName(cityName) {
 
   return {
     cityLabel: [place.name, place.admin1, place.country_code].filter(Boolean).join(", "),
-    tempF: Number(weather.current.temperature_2m),
-    humidity: Number(weather.current.relative_humidity_2m),
-    dewPointF: Number(weather.current.dew_point_2m),
-    altitudeFt: Number(weather.elevation || place.elevation || 0) * 3.28084,
+    tempF: toFiniteNumber(weather.current.temperature_2m),
+    humidity: toFiniteNumber(weather.current.relative_humidity_2m),
+    dewPointF: toFiniteNumber(weather.current.dew_point_2m),
+    altitudeFt: toFiniteNumber(weather.elevation || place.elevation || 0) !== null
+      ? Number(weather.elevation || place.elevation || 0) * 3.28084
+      : null,
   };
 }
 
@@ -137,17 +152,26 @@ async function populateEnvironmentalFactorsFromCity() {
 
     const data = await fetchWeatherByCityName(city);
 
-    if (state.tempF) state.tempF.value = String(Math.round(data.tempF));
-    if (state.humidity) state.humidity.value = String(Math.round(data.humidity));
-    if (state.dewPointF) state.dewPointF.value = String(Math.round(data.dewPointF));
-    if (state.altitudeFt) state.altitudeFt.value = String(Math.round(data.altitudeFt / 100) * 100);
+    const updates = [
+      setFieldIfFinite("tempF", data.tempF, (v) => Math.round(v)),
+      setFieldIfFinite("humidity", data.humidity, (v) => Math.round(v)),
+      setFieldIfFinite("dewPointF", data.dewPointF, (v) => Math.round(v)),
+      setFieldIfFinite("altitudeFt", data.altitudeFt, (v) => Math.round(v / 100) * 100),
+    ];
 
     if (weatherLocationEl) {
       weatherLocationEl.textContent = `Resolved: ${data.cityLabel}`;
     }
 
     render();
-    weatherStatus(`Weather loaded for ${data.cityLabel}. Environmental factors updated.`);
+    if (updates.some(Boolean)) {
+      weatherStatus(`Weather loaded for ${data.cityLabel}. Environmental factors updated.`);
+    } else {
+      weatherStatus(
+        `City resolved (${data.cityLabel}), but weather fields were incomplete from provider. Try again in a moment.`,
+        true
+      );
+    }
   } catch (err) {
     weatherStatus(err.message || "Failed to load city weather.", true);
   } finally {
