@@ -102,6 +102,15 @@ function setFieldIfFinite(fieldId, value, transform = (v) => v) {
   return true;
 }
 
+function extractFirstFinite(values) {
+  if (!Array.isArray(values)) return null;
+  for (const v of values) {
+    const n = toFiniteNumber(v);
+    if (n !== null) return n;
+  }
+  return null;
+}
+
 async function fetchWeatherByCityName(cityName) {
   const query = String(cityName || "").trim();
   if (!query) {
@@ -123,6 +132,8 @@ async function fetchWeatherByCityName(cityName) {
   const weatherUrl =
     `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}` +
     `&current=temperature_2m,relative_humidity_2m,dew_point_2m` +
+    `&current_weather=true` +
+    `&hourly=temperature_2m,relative_humidity_2m,dew_point_2m` +
     `&temperature_unit=fahrenheit`;
 
   const weatherRes = await fetch(weatherUrl);
@@ -131,15 +142,21 @@ async function fetchWeatherByCityName(cityName) {
   }
 
   const weather = await weatherRes.json();
-  if (!weather.current) {
+  if (!weather.current && !weather.current_weather && !weather.hourly) {
     throw new Error("Current weather data not available for this city.");
   }
 
+  const fallbackTemp =
+    toFiniteNumber(weather?.current_weather?.temperature) ??
+    extractFirstFinite(weather?.hourly?.temperature_2m);
+  const fallbackHumidity = extractFirstFinite(weather?.hourly?.relative_humidity_2m);
+  const fallbackDewPoint = extractFirstFinite(weather?.hourly?.dew_point_2m);
+
   return {
     cityLabel: [place.name, place.admin1, place.country_code].filter(Boolean).join(", "),
-    tempF: toFiniteNumber(weather.current.temperature_2m),
-    humidity: toFiniteNumber(weather.current.relative_humidity_2m),
-    dewPointF: toFiniteNumber(weather.current.dew_point_2m),
+    tempF: toFiniteNumber(weather?.current?.temperature_2m) ?? fallbackTemp,
+    humidity: toFiniteNumber(weather?.current?.relative_humidity_2m) ?? fallbackHumidity,
+    dewPointF: toFiniteNumber(weather?.current?.dew_point_2m) ?? fallbackDewPoint,
     altitudeFt: toFiniteNumber(weather.elevation || place.elevation || 0) !== null
       ? Number(weather.elevation || place.elevation || 0) * 3.28084
       : null,
@@ -175,7 +192,7 @@ async function populateEnvironmentalFactorsFromCity() {
       );
     }
   } catch (err) {
-    weatherStatus(err.message || "Failed to load city weather.", true);
+    weatherStatus(err?.message || "Failed to load city weather.", true);
   } finally {
     if (loadWeatherBtn) loadWeatherBtn.disabled = false;
   }
