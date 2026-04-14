@@ -52,6 +52,27 @@
           </label>
 
           <label>
+            Sex assigned at birth
+            <select id="sexAssignedAtBirth">
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="intersex">Intersex</option>
+              <option value="unspecified">Prefer not to say</option>
+            </select>
+            <span class="hint">Optional personalization input. Applies a small baseline multiplier only (not a medical diagnosis).</span>
+          </label>
+
+          <label>
+            Fitness / heat acclimatization
+            <select id="acclimatizationLevel">
+              <option value="low">Low (not acclimatized)</option>
+              <option value="moderate">Moderate (partially acclimatized)</option>
+              <option value="high">High (well acclimatized)</option>
+            </select>
+            <span class="hint">Adjusts demand based on conditioning and heat adaptation. Lower acclimatization generally increases fluid need.</span>
+          </label>
+
+          <label>
             City name (weather source)
             <input id="cityName" type="text" value="Phoenix, AZ" placeholder="e.g., Phoenix, AZ" />
             <button id="loadWeatherBtn" type="button" class="estimate-btn">Auto-fill Weather by City</button>

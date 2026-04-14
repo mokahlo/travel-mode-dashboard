@@ -14,6 +14,8 @@ const ids = [
   "cityName",
   "weightLbs",
   "ageYears",
+  "sexAssignedAtBirth",
+  "acclimatizationLevel",
   "activityLevel",
   "tempF",
   "humidity",
@@ -226,9 +228,31 @@ function calculateHydrationBenchmark(weightLbs, ageYears, factors, hoursSinceInt
   const ageAdjustmentOz = Number(ageYears) >= 55 ? 4 : Number(ageYears) < 18 ? -2 : 0;
   const adjustedBaseOz = Math.max(0, baseOz + ageAdjustmentOz);
 
+  const sexAssignedAtBirth = String(factors.sexAssignedAtBirth || "unspecified");
+  const sexMultiplierMap = {
+    female: 0.97,
+    male: 1.03,
+    intersex: 1.0,
+    unspecified: 1.0,
+  };
+  const sexMultiplier = sexMultiplierMap[sexAssignedAtBirth] ?? 1.0;
+
+  const acclimatizationLevel = String(factors.acclimatizationLevel || "moderate");
+  const acclimatizationMultiplierMap = {
+    low: 1.08,
+    moderate: 1.03,
+    high: 0.95,
+  };
+  const acclimatizationMultiplier = acclimatizationMultiplierMap[acclimatizationLevel] ?? 1.0;
+
   const evaporative = calculateEvaporativeDemand(factors);
   const metabolicMultiplier = 1 + clamp((Number(hoursSinceIntake) || 0) * 0.02, 0, 0.24);
-  const benchmarkOz = adjustedBaseOz * evaporative.multiplier * metabolicMultiplier;
+  const benchmarkOz =
+    adjustedBaseOz *
+    sexMultiplier *
+    acclimatizationMultiplier *
+    evaporative.multiplier *
+    metabolicMultiplier;
 
   return {
     baseOz: adjustedBaseOz,
@@ -249,6 +273,8 @@ function buildModeModels() {
     humidity: Number(value("humidity") || 0),
     dewPointF: Number(value("dewPointF") || 0),
     activityLevel: value("activityLevel") || "sedentary",
+    sexAssignedAtBirth: value("sexAssignedAtBirth") || "unspecified",
+    acclimatizationLevel: value("acclimatizationLevel") || "moderate",
     altitudeFt: Number(value("altitudeFt") || 0),
   };
 
@@ -470,6 +496,8 @@ document.getElementById("resetBtn").addEventListener("click", () => {
     cityName: "Phoenix, AZ",
     weightLbs: "180",
     ageYears: "38",
+    sexAssignedAtBirth: "female",
+    acclimatizationLevel: "moderate",
     activityLevel: "moderate",
     tempF: "104",
     humidity: "14",
