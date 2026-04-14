@@ -31,12 +31,17 @@
           <button id="resetBtn" class="reset-btn">Reset to Defaults</button>
         </div>
 
+        <p class="input-guide">
+          <strong>Quick start:</strong> Enter a city and click <em>Auto-fill Weather by City</em>, then adjust personal factors.
+          Your benchmark updates automatically as each input changes.
+        </p>
+
         <div class="control-grid">
           <label>
             City name (weather source)
             <input id="cityName" type="text" value="Phoenix, AZ" placeholder="e.g., Phoenix, AZ" />
             <button id="loadWeatherBtn" type="button" class="estimate-btn">Auto-fill Weather by City</button>
-            <span class="hint">Browser-only lookup (no app server): fills temperature, humidity, dew point, and altitude.</span>
+            <span class="hint">Type a city like <strong>Phoenix, AZ</strong> or <strong>Denver</strong>. This browser-only lookup fills temperature, humidity, dew point, and altitude.</span>
             <span id="weatherLocation" class="muted"></span>
             <span id="weatherStatus" class="muted"></span>
           </label>
@@ -45,14 +50,14 @@
             User weight (lbs)
             <input id="weightLbs" type="number" min="60" max="400" step="1" value="180" />
             <span data-output="weightLbs"></span>
-            <span class="hint">Baseline hydration starts at approximately 0.5 oz per lb body weight.</span>
+            <span class="hint">Used for baseline hydration need. Rule of thumb: about <strong>0.5 oz per lb/day</strong> before climate multipliers.</span>
           </label>
 
           <label>
             User age (years)
             <input id="ageYears" type="number" min="12" max="100" step="1" value="38" />
             <span data-output="ageYears"></span>
-            <span class="hint">Age lightly adjusts baseline hydration need.</span>
+            <span class="hint">Age makes a small baseline adjustment. Example: older adults may require a slightly higher target.</span>
           </label>
 
           <label>
@@ -62,49 +67,49 @@
               <option value="moderate">Moderate</option>
               <option value="active">Active</option>
             </select>
-            <span class="hint">Higher activity increases evaporative demand.</span>
+            <span class="hint"><strong>Sedentary</strong> = minimal exertion, <strong>Moderate</strong> = walking/light work, <strong>Active</strong> = exercise or outdoor labor.</span>
           </label>
 
           <label>
             Temperature (°F)
             <input id="tempF" type="range" min="60" max="125" step="1" value="104" />
             <span data-output="tempF"></span>
-            <span class="hint">Phoenix heat can significantly increase hydration demand.</span>
+            <span class="hint">Ambient air temperature. Values above <strong>100°F</strong> can sharply increase hydration demand.</span>
           </label>
 
           <label>
             Relative humidity (%)
             <input id="humidity" type="range" min="5" max="80" step="1" value="14" />
             <span data-output="humidity"></span>
-            <span class="hint">Very low humidity amplifies fluid loss.</span>
+            <span class="hint">Lower humidity increases evaporative loss. In this model, <strong>&lt;15%</strong> is treated as very dry/high demand.</span>
           </label>
 
           <label>
             Dew point (°F)
             <input id="dewPointF" type="range" min="10" max="75" step="1" value="33" />
             <span data-output="dewPointF"></span>
-            <span class="hint">Lower dew point indicates drier air and higher evaporative demand.</span>
+            <span class="hint">Another dryness signal: lower dew point generally means drier air and greater fluid loss risk.</span>
           </label>
 
           <label>
             Altitude (ft)
             <input id="altitudeFt" type="range" min="0" max="9000" step="100" value="1086" />
             <span data-output="altitudeFt"></span>
-            <span class="hint">Higher altitude adds mild hydration burden.</span>
+            <span class="hint">Elevation above sea level. Higher altitude adds a mild hydration burden (especially over 4,000 ft).</span>
           </label>
 
           <label>
             Hours since last intake
             <input id="hoursSinceIntake" type="range" min="0" max="12" step="0.5" value="3" />
             <span data-output="hoursSinceIntake"></span>
-            <span class="hint">Longer metabolic window increases short-term recommended intake.</span>
+            <span class="hint">How long it has been since your last drink. Longer gaps increase short-term catch-up target.</span>
           </label>
 
           <label>
             Intake volume (ml)
             <input id="intakeVolumeMl" type="number" min="0" max="5000" step="10" value="900" />
             <span data-output="intakeVolumeMl"></span>
-            <span class="hint">Amount consumed in the active hydration window.</span>
+            <span class="hint">Amount consumed in this window. Quick reference: <strong>500 ml ≈ 16.9 oz</strong>.</span>
           </label>
 
           <label>
@@ -114,14 +119,14 @@
               <option value="coffee">Coffee (0.8)</option>
               <option value="electrolyte">Electrolytes (1.2)</option>
             </select>
-            <span class="hint">Coefficient adjusts effective hydration contribution.</span>
+            <span class="hint">Coefficient adjusts effective hydration: water baseline (1.0), coffee lower (0.8), electrolytes higher (1.2).</span>
           </label>
 
           <label>
             Peer benchmark weight (lbs)
             <input id="peerWeightLbs" type="number" min="60" max="400" step="1" value="170" />
             <span data-output="peerWeightLbs"></span>
-            <span class="hint">Reference profile for comparison card.</span>
+            <span class="hint">Reference person used for comparison cards. Try values near your demographic baseline.</span>
           </label>
         </div>
       </section>

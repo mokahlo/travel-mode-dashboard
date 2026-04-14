@@ -171,6 +171,21 @@ h1 {
   font-style: italic;
 }
 
+.input-guide {
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f7fcfb;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.input-guide strong {
+  color: var(--ink);
+}
+
 h2,
 h3 {
   margin: 0.15rem 0 0.75rem;
@@ -342,13 +357,7 @@ label span {
   font-size: 0.75rem;
   color: var(--muted);
   font-style: italic;
-  display: none;
-}
-
-@media (min-width: 600px) {
-  .hint {
-    display: block;
-  }
+  display: block;
 }
 
 .cards {
